@@ -1,0 +1,24 @@
+{
+  "name": "matterbridge-loxone",
+  "version": "1.0.0",
+  "description": "A Matterbridge plugin to interact with Loxone components",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrasg/matterbridge-loxone.git"
+  },
+  "keywords": [
+    "matterbridge",
+    "loxone"
+  ],
+  "author": "Andras Gaal",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/andrasg/matterbridge-loxone/issues"
+  },
+  "homepage": "https://github.com/andrasg/matterbridge-loxone#readme"
+}
