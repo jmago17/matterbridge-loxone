@@ -137,3 +137,6 @@ dist
 
 # Matterbridge persistence
 .matterbridge/
+
+# exclude build info
+src/gitInfo.ts

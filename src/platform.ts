@@ -20,6 +20,7 @@ import { OnOffSwitch } from './devices/OnOffSwitch.js';
 import { OnOffLight } from './devices/OnOffLight.js';
 import { OnOffButton } from './devices/OnOffButton.js';
 import { PressureSensor } from './devices/PressureSensor.js';
+import { GIT_BRANCH, GIT_COMMIT } from './gitInfo.js';
 
 export class LoxonePlatform extends MatterbridgeDynamicPlatform {
   public debugEnabled: boolean;
@@ -42,6 +43,7 @@ export class LoxonePlatform extends MatterbridgeDynamicPlatform {
     super(matterbridge, log, config);
 
     this.log.info('Initializing Loxone platform');
+    this.log.info(`Code build from branch '${GIT_BRANCH}', commit '${GIT_COMMIT}'`);
 
     this.debugEnabled = config.debug as boolean;
 

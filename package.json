@@ -8,6 +8,7 @@
   "types": "dist/index.d.ts",
   "main": "dist/index.js",
   "scripts": {
+    "prebuild": "node scripts/genGitInfo.cjs",
     "build": "tsc -p tsconfig.json",
     "buildProduction": "tsc --project tsconfig.production.json",
     "start": "tsc -p tsconfig.json && matterbridge",
