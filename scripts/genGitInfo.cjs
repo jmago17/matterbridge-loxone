@@ -10,4 +10,5 @@ export const GIT_COMMIT = '${commit}';
 `;
 
 fs.writeFileSync('src/gitInfo.ts', content);
+// eslint-disable-next-line no-console
 console.log('src/gitInfo.ts generated.');
