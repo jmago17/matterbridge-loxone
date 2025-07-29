@@ -42,7 +42,6 @@ abstract class LoxoneDevice {
     typeName: string,
     uniqueStorageKey: string,
     nameSuffix: string | undefined = undefined,
-    endpointOverride: MatterbridgeEndpoint | undefined = undefined,
   ) {
     this.structureSection = structureSection;
     this.StatusUUIDs = statusUUIDs;
@@ -65,7 +64,13 @@ abstract class LoxoneDevice {
     this.uniqueStorageKey = uniqueStorageKey;
 
     // create the endpoint
-    this.Endpoint = endpointOverride ?? this.createDefaultEndpoint();
+    this.Endpoint = this.createDefaultEndpoint();
+
+    // log all cached events
+    getAllEvents<LoxoneUpdateEvent>(this.platform.initialUpdateEvents, this.StatusUUIDs).forEach((event) => {
+      const logLine = this.platform.uuidToLogLineMap.get(event.uuid);
+      this.Endpoint.log.debug(`Cached event: ${BLUE}${logLine}${GREY} (${event.uuid}) = ${YELLOW}${event.valueString()}${GREY}`);
+    });
 
     // log all cached events
     getAllEvents<LoxoneUpdateEvent>(this.platform.initialUpdateEvents, this.StatusUUIDs).forEach((event) => {
