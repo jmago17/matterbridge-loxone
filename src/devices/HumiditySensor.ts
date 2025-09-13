@@ -1,30 +1,21 @@
 import { humiditySensor } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
 import { RelativeHumidityMeasurement } from 'matterbridge/matter/clusters';
-import { LoxoneValueUpdateEvent } from '../data/LoxoneValueUpdateEvent.js';
-import { SingleDataPointSensor } from './SingleDataPointSensor.js';
+import { SingleDataPointSensor, ValueOnlyStateNamesType, ValueOnlyStateNameKeys } from './SingleDataPointSensor.js';
+import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
+import Control from 'loxone-ts-api/dist/Structure/Control.js';
 
-class HumiditySensor extends SingleDataPointSensor {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(structureSection: any, platform: LoxonePlatform) {
-    super(
-      structureSection,
-      platform,
-      HumiditySensor.name,
-      'humidity sensor',
-      structureSection.states.value,
-      humiditySensor,
-      RelativeHumidityMeasurement.Cluster.id,
-      'measuredValue',
-    );
+class HumiditySensor extends SingleDataPointSensor<ValueOnlyStateNamesType> {
+  constructor(control: Control, platform: LoxonePlatform) {
+    super(control, platform, HumiditySensor.name, 'humidity sensor', ValueOnlyStateNameKeys[0], humiditySensor, RelativeHumidityMeasurement.Cluster.id, 'measuredValue');
 
-    const latestValueEvent = this.getLatestValueEvent(structureSection.states.value);
+    const latestValueEvent = this.getLatestValueEvent(this.singleStateName);
     const initialValue = this.valueConverter(latestValueEvent);
 
     this.Endpoint.createDefaultRelativeHumidityMeasurementClusterServer(initialValue);
   }
 
-  override valueConverter(event: LoxoneValueUpdateEvent | undefined): number {
+  override valueConverter(event: LoxoneValueEvent | undefined): number {
     return event ? Math.round(event.value * 100) : 0;
   }
 }

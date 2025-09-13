@@ -1,55 +1,60 @@
 import { bridgedNode, DeviceTypeDefinition, powerSource } from 'matterbridge';
 import { ClusterId } from 'matterbridge/matter';
-import { LoxoneUpdateEvent } from '../data/LoxoneUpdateEvent.js';
-import { LoxoneValueUpdateEvent } from '../data/LoxoneValueUpdateEvent.js';
 import { LoxonePlatform } from '../platform.js';
 import { LoxoneDevice } from './LoxoneDevice.js';
+import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
+import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
+import Control from 'loxone-ts-api/dist/Structure/Control.js';
 
-abstract class SingleDataPointSensor extends LoxoneDevice {
+export const ValueOnlyStateNames = {
+  value: 'value',
+} as const;
+export const ValueOnlyStateNameKeys = Object.values(ValueOnlyStateNames) as (typeof ValueOnlyStateNames)[keyof typeof ValueOnlyStateNames][];
+export type ValueOnlyStateNamesType = (typeof ValueOnlyStateNames)[keyof typeof ValueOnlyStateNames];
+
+export const ActiveOnlyStateNames = {
+  active: 'active',
+} as const;
+export const ActiveOnlyStateNameKeys = Object.values(ActiveOnlyStateNames) as (typeof ActiveOnlyStateNames)[keyof typeof ActiveOnlyStateNames][];
+export type ActiveOnlyStateNamesType = (typeof ActiveOnlyStateNames)[keyof typeof ActiveOnlyStateNames];
+
+abstract class SingleDataPointSensor<T extends string = string> extends LoxoneDevice<T> {
   clusterId: ClusterId;
   attributeName: string;
+  singleStateName: T;
+
   constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    structureSection: any,
+    control: Control,
     platform: LoxonePlatform,
     className: string,
     shortTypeName: string,
-    statusUUID: string,
+    stateName: T,
     sensorDeviceType: DeviceTypeDefinition,
     clusterId: ClusterId,
     attributeName: string,
   ) {
-    super(structureSection, platform, [sensorDeviceType, bridgedNode, powerSource], [statusUUID], shortTypeName, `${className}_${structureSection.uuidAction.replace(/-/g, '_')}`);
+    super(control, platform, [sensorDeviceType, bridgedNode, powerSource], [stateName], shortTypeName, `${className}_${control.structureSection.uuidAction.replace(/-/g, '_')}`);
 
     this.clusterId = clusterId;
     this.attributeName = attributeName;
-
-    // at least one status UUID is required
-    if (!statusUUID) {
-      throw new Error(`No status UUID provided for ${this.longname}`);
-    }
+    this.singleStateName = stateName;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  abstract valueConverter(event: LoxoneValueUpdateEvent | undefined): any;
+  abstract valueConverter(event: LoxoneValueEvent | undefined): any;
 
-  override async handleLoxoneDeviceEvent(event: LoxoneUpdateEvent) {
-    if (!(event instanceof LoxoneValueUpdateEvent)) return;
+  override async handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
+    if (!(event instanceof LoxoneValueEvent)) return;
 
     await this.updateAttributesFromLoxoneEvent(event);
   }
 
   override async populateInitialState() {
-    const latestValueEvent = this.getLatestValueEvent(this.structureSection.states.active);
-    if (!latestValueEvent) {
-      this.Endpoint.log.warn(`No initial value event found for ${this.longname}`);
-      return;
-    }
-
-    await this.updateAttributesFromLoxoneEvent(latestValueEvent);
+    const latestEvent = this.getLatestValueEvent(this.singleStateName);
+    await this.updateAttributesFromLoxoneEvent(latestEvent);
   }
 
-  private async updateAttributesFromLoxoneEvent(event: LoxoneValueUpdateEvent) {
+  private async updateAttributesFromLoxoneEvent(event: LoxoneValueEvent) {
     const value = this.valueConverter(event);
     await this.Endpoint.updateAttribute(this.clusterId, this.attributeName, value, this.Endpoint.log);
   }

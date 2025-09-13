@@ -3,26 +3,23 @@ import { AtLeastOne, ClusterId } from 'matterbridge/matter';
 import { PowerSource } from 'matterbridge/matter/clusters';
 import { createHash } from 'node:crypto';
 import { BatteryLevelInfo } from '../data/BatteryLevelInfo.js';
-import { LoxoneTextUpdateEvent } from '../data/LoxoneTextUpdateEvent.js';
-import { LoxoneUpdateEvent } from '../data/LoxoneUpdateEvent.js';
-import { LoxoneValueUpdateEvent } from '../data/LoxoneValueUpdateEvent.js';
 import { LoxonePlatform } from '../platform.js';
-import { getAllEvents, getLatestEvent, getLatestValueEvent } from '../utils/Utils.js';
 import { CommandData } from '../utils/CommandData.js';
-import { BLUE, GREY, YELLOW } from 'matterbridge/logger';
+import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
+import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
+import Control from 'loxone-ts-api/dist/Structure/Control.js';
+import State from 'loxone-ts-api/dist/Structure/State.js';
+import { LoxoneEvent } from 'loxone-ts-api/dist/LoxoneEvents/LoxoneEvent.js';
+
+export const BASE_STATE_NAMES = ['battery'] as const;
+export type BaseStateNameType = (typeof BASE_STATE_NAMES)[number];
 
 /**
  * Base class for Loxone devices. This class should be extended by all Loxone device classes.
  */
-abstract class LoxoneDevice {
-  /**
-   * The UUIDs of events this device will respond to.
-   * @type {string[]}
-   */
-  public StatusUUIDs: string[];
+abstract class LoxoneDevice<T extends string = string> {
   public Endpoint: MatterbridgeEndpoint;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public structureSection: any;
+  public control: Control;
   public roomname: string;
   public longname: string;
   public platform: LoxonePlatform;
@@ -30,31 +27,29 @@ abstract class LoxoneDevice {
   public deviceTypeDefinitions: AtLeastOne<DeviceTypeDefinition>;
   public uniqueStorageKey: string;
   private batteryUUID: string | undefined;
-  public latestEventMap: Map<string, LoxoneUpdateEvent | undefined> = new Map<string, LoxoneUpdateEvent | undefined>();
-  private uuidToStateNameMap: Map<string, string> = new Map<string, string>();
+  public statesByName: Map<T | BaseStateNameType, State> = new Map<T | BaseStateNameType, State>();
 
   constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    structureSection: any,
+    control: Control,
     platform: LoxonePlatform,
     deviceTypeDefinitions: AtLeastOne<DeviceTypeDefinition>,
-    statusUUIDs: string[],
+    stateNames: readonly T[],
     typeName: string,
     uniqueStorageKey: string,
     nameSuffix: string | undefined = undefined,
   ) {
-    this.structureSection = structureSection;
-    this.StatusUUIDs = statusUUIDs;
-    this.StatusUUIDs.forEach((uuid) => {
-      for (const key in this.structureSection.states) {
-        if (this.structureSection.states[key] === uuid) {
-          this.uuidToStateNameMap.set(uuid, key);
-          break;
-        }
-      }
-    });
-    this.roomname = platform.roomMapping.get(this.structureSection.room) ?? 'Unknown';
-    this.longname = `${this.roomname}/${this.structureSection.name}`;
+    this.control = control;
+
+    // find all states we are interested in and ensure we have a latest value
+    for (const stateName of stateNames) {
+      const state = control.statesByName.get(stateName);
+      if (!state) throw new Error(`Could not find state found for '${stateName}'`);
+      if (!state.latestEvent) throw new Error(`No latest event received for '${stateName}' (${state.uuid.stringValue})`);
+      this.statesByName.set(state.name as T, state);
+    }
+
+    this.roomname = control.room.name;
+    this.longname = `${this.roomname}/${this.control.name}`;
     if (nameSuffix) {
       this.longname += `/${nameSuffix}`;
     }
@@ -65,28 +60,6 @@ abstract class LoxoneDevice {
 
     // create the endpoint
     this.Endpoint = this.createDefaultEndpoint();
-
-    // log all cached events
-    getAllEvents<LoxoneUpdateEvent>(this.platform.initialUpdateEvents, this.StatusUUIDs).forEach((event) => {
-      const logLine = this.platform.uuidToLogLineMap.get(event.uuid);
-      this.Endpoint.log.debug(`Cached event: ${BLUE}${logLine}${GREY} (${event.uuid}) = ${YELLOW}${event.valueString()}${GREY}`);
-    });
-
-    // log all cached events
-    getAllEvents<LoxoneUpdateEvent>(this.platform.initialUpdateEvents, this.StatusUUIDs).forEach((event) => {
-      const logLine = this.platform.uuidToLogLineMap.get(event.uuid);
-      this.Endpoint.log.debug(`Cached event: ${BLUE}${logLine}${GREY} (${event.uuid}) = ${YELLOW}${event.valueString()}${GREY}`);
-    });
-
-    // pre-populate with events from the initial update events list
-    for (const uuid of this.StatusUUIDs) {
-      const latestEvent = getLatestEvent(this.platform.initialUpdateEvents, uuid);
-      this.latestEventMap.set(uuid, latestEvent);
-      if (!latestEvent) {
-        const logLine = this.platform.uuidToLogLineMap.get(uuid);
-        this.Endpoint.log.warn(`No latest event found for ${logLine} (${uuid})`);
-      }
-    }
   }
 
   /**
@@ -149,15 +122,17 @@ abstract class LoxoneDevice {
   public WithReplacableBattery(batteryUUID: string): LoxoneDevice {
     this.batteryUUID = batteryUUID;
 
-    // start listening to battery events
-    this.StatusUUIDs.push(batteryUUID);
+    // find state
+    const batteryState = this.platform.loxoneClient.states.get(batteryUUID);
+    if (!batteryState) throw new Error(`Could not find state found for batteryUUID '${batteryUUID}'`);
 
-    // add the value event to the latestEventMap
-    const initialValue = getLatestValueEvent(this.platform.initialUpdateEvents, batteryUUID);
-    this.latestEventMap.set(batteryUUID, initialValue);
+    if (!batteryState.latestEvent) throw new Error(`No state received for batteryUUID '${batteryUUID}'`);
+
+    // start listening to battery events
+    this.statesByName.set('battery' as T, batteryState);
 
     // set the initial battery attribute
-    const batteryLevelInfo = BatteryLevelInfo.fromEvent(initialValue);
+    const batteryLevelInfo = BatteryLevelInfo.fromEvent(batteryState.latestEvent);
     this.Endpoint.createDefaultPowerSourceReplaceableBatteryClusterServer(batteryLevelInfo.batteryRemaining, batteryLevelInfo.batteryStatus);
 
     // for chaining
@@ -181,7 +156,7 @@ abstract class LoxoneDevice {
     const delegate = async (data: CommandData) => {
       const commandString = loxoneCommandFormatter?.(data);
       this.Endpoint.log.info(`Calling Loxone API command '${commandString}'`);
-      await this.platform.loxoneClient.control(this.structureSection.uuidAction, commandString);
+      await this.platform.loxoneClient.control(this.control.structureSection.uuidAction, commandString);
     };
 
     // register the delegate for the event
@@ -211,7 +186,7 @@ abstract class LoxoneDevice {
 
       for (const commandString of commandStrings) {
         this.Endpoint.log.info(`Calling Loxone API command '${commandString}'`);
-        await this.platform.loxoneClient.control(this.structureSection.uuidAction, commandString);
+        await this.platform.loxoneClient.control(this.control.uuidAction, commandString);
       }
     };
 
@@ -223,34 +198,47 @@ abstract class LoxoneDevice {
    * Handles the Loxone update event raised by the platform. Only used by the platform to send events to the Loxone devices.
    * @param event The LoxoneUpdateEvent to handle.
    */
-  async handleUpdateEvent(event: LoxoneUpdateEvent) {
+  async handleUpdateEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
     // handle battery events
-    if (event instanceof LoxoneValueUpdateEvent && event.uuid === this.batteryUUID) {
+    if (event instanceof LoxoneValueEvent && event.uuid.stringValue === this.batteryUUID) {
       await this.handleBatteryEvent(event);
       return;
     }
 
-    this.Endpoint.log.debug(`Event from Loxone: ${BLUE}${this.uuidToStateNameMap.get(event.uuid) ?? 'unknown'}${GREY} (${event.uuid}) = ${YELLOW}${event.valueString()}${GREY}`);
-
-    // store (overwrite) the latest value in the event map
-    this.latestEventMap.set(event.uuid, event);
+    this.Endpoint.log.debug(`Event from Loxone: ${event.toString()}`);
 
     // let the device handle the event
     await this.handleLoxoneDeviceEvent(event);
   }
 
-  private async handleBatteryEvent(event: LoxoneValueUpdateEvent) {
+  private async handleBatteryEvent(event: LoxoneEvent) {
     const batteryLevelInfo = BatteryLevelInfo.fromEvent(event);
 
     await this.Endpoint.updateAttribute(PowerSource.Cluster.id, 'batPercentRemaining', batteryLevelInfo.batteryRemaining, this.Endpoint.log);
     await this.Endpoint.updateAttribute(PowerSource.Cluster.id, 'batChargeLevel', batteryLevelInfo.batteryStatus, this.Endpoint.log);
   }
 
+  protected getLatestValueEvent(stateName: T): LoxoneValueEvent {
+    const state = this.statesByName.get(stateName);
+    if (!state) throw new Error(`State with name '${stateName}' not found`);
+    if (!state.latestEvent) throw new Error(`No latest event found for state '${stateName}'`);
+    if (!(state.latestEvent instanceof LoxoneValueEvent)) throw new Error(`Latest event for state ${stateName} is not a value event`);
+    return state.latestEvent as LoxoneValueEvent;
+  }
+
+  protected getLatestTextEvent(stateName: T): LoxoneTextEvent {
+    const state = this.statesByName.get(stateName);
+    if (!state) throw new Error(`State with name '${stateName}' not found`);
+    if (!state.latestEvent) throw new Error(`No latest event found for state '${stateName}'`);
+    if (!(state.latestEvent instanceof LoxoneTextEvent)) throw new Error(`Latest event for state ${stateName} is not a text event`);
+    return state.latestEvent as LoxoneTextEvent;
+  }
+
   /**
    * Handles the Loxone device event. Method must be overridden in subclasses.
    * @param event The LoxoneUpdateEvent to handle.
    */
-  abstract handleLoxoneDeviceEvent(event: LoxoneUpdateEvent): Promise<void>;
+  abstract handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent): Promise<void>;
 
   /**
    * Asks the device to set its attributes from its internal state. Used in the onConfigure event.
@@ -259,27 +247,13 @@ abstract class LoxoneDevice {
 
   public async restoreState() {
     if (this.batteryUUID !== undefined) {
-      const latestValueEvent = this.getLatestValueEvent(this.batteryUUID);
-      if (latestValueEvent !== undefined) {
-        await this.handleBatteryEvent(latestValueEvent);
-      }
+      this.Endpoint.log.debug(`Restoring battery state`);
+      const batteryState = this.statesByName.get('battery' as T);
+      if (!batteryState || !batteryState.latestEvent) throw new Error(`Battery state cannot be restored`);
+      await this.handleBatteryEvent(batteryState.latestEvent);
     }
     this.Endpoint.log.debug(`Restoring state`);
     await this.populateInitialState();
-  }
-
-  public getLatestValueEvent(uuid: string): LoxoneValueUpdateEvent | undefined {
-    const latestEvent = this.latestEventMap.get(uuid);
-    if (!(latestEvent instanceof LoxoneValueUpdateEvent)) return undefined;
-
-    return latestEvent;
-  }
-
-  public getLatestTextEvent(uuid: string): LoxoneTextUpdateEvent | undefined {
-    const latestEvent = this.latestEventMap.get(uuid);
-    if (!(latestEvent instanceof LoxoneTextUpdateEvent)) return undefined;
-
-    return latestEvent;
   }
 }
 

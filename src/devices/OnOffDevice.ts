@@ -1,21 +1,24 @@
 import { bridgedNode, powerSource, DeviceTypeDefinition } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
-import { LoxoneValueUpdateEvent } from '../data/LoxoneValueUpdateEvent.js';
 import { OnOff } from 'matterbridge/matter/clusters';
 import { LoxoneDevice } from './LoxoneDevice.js';
-import { LoxoneUpdateEvent } from '../data/LoxoneUpdateEvent.js';
+import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
+import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
+import Control from 'loxone-ts-api/dist/Structure/Control.js';
+import { ActiveOnlyStateNameKeys, ActiveOnlyStateNames, ActiveOnlyStateNamesType } from './SingleDataPointSensor.js';
 
-abstract class OnOffDevice extends LoxoneDevice {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(structureSection: any, platform: LoxonePlatform, className: string, shortTypeName: string, statusUUID: string, onOffDeviceType: DeviceTypeDefinition) {
-    super(structureSection, platform, [onOffDeviceType, bridgedNode, powerSource], [statusUUID], shortTypeName, `${className}_${structureSection.uuidAction.replace(/-/g, '_')}`);
+abstract class OnOffDevice extends LoxoneDevice<ActiveOnlyStateNamesType> {
+  constructor(control: Control, platform: LoxonePlatform, className: string, shortTypeName: string, onOffDeviceType: DeviceTypeDefinition) {
+    super(
+      control,
+      platform,
+      [onOffDeviceType, bridgedNode, powerSource],
+      ActiveOnlyStateNameKeys,
+      shortTypeName,
+      `${className}_${control.structureSection.uuidAction.replace(/-/g, '_')}`,
+    );
 
-    // at least one status UUID is required
-    if (!statusUUID) {
-      throw new Error(`No status UUID provided for ${this.longname}`);
-    }
-
-    const latestValueEvent = this.getLatestValueEvent(statusUUID);
+    const latestValueEvent = this.getLatestValueEvent(ActiveOnlyStateNames.active);
     const initialValue = latestValueEvent ? latestValueEvent.value === 1 : false;
 
     this.Endpoint.createDefaultGroupsClusterServer().createDefaultOnOffClusterServer(initialValue);
@@ -24,23 +27,18 @@ abstract class OnOffDevice extends LoxoneDevice {
     this.addLoxoneCommandHandler('off');
   }
 
-  override async handleLoxoneDeviceEvent(event: LoxoneUpdateEvent) {
-    if (!(event instanceof LoxoneValueUpdateEvent)) return;
+  override async handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
+    if (!(event instanceof LoxoneValueEvent)) return;
 
     await this.updateAttributesFromLoxoneEvent(event);
   }
 
   override async populateInitialState() {
-    const latestValueEvent = this.getLatestValueEvent(this.StatusUUIDs[0]);
-    if (!latestValueEvent) {
-      this.Endpoint.log.warn(`No initial value event found for ${this.longname}`);
-      return;
-    }
-
+    const latestValueEvent = this.getLatestValueEvent(ActiveOnlyStateNames.active);
     await this.updateAttributesFromLoxoneEvent(latestValueEvent);
   }
 
-  private async updateAttributesFromLoxoneEvent(event: LoxoneValueUpdateEvent) {
+  private async updateAttributesFromLoxoneEvent(event: LoxoneValueEvent) {
     await this.Endpoint.updateAttribute(OnOff.Cluster.id, 'onOff', event.value === 1, this.Endpoint.log);
   }
 }
