@@ -1,7 +1,7 @@
-import { bridgedNode, powerSource, dimmableLight } from 'matterbridge';
+import { bridgedNode, powerSource, dimmableLight, MatterbridgeEndpoint } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
 import { OnOff, LevelControl } from 'matterbridge/matter/clusters';
-import { LoxoneDevice } from './LoxoneDevice.js';
+import { LoxoneDevice, RegisterLoxoneDevice } from './LoxoneDevice.js';
 import { LoxoneLevelInfo } from '../data/LoxoneLevelInfo.js';
 import { MatterLevelInfo } from '../data/MatterLevelInfo.js';
 import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
@@ -15,6 +15,8 @@ type StateNameType = (typeof StateNames)[keyof typeof StateNames];
 const StateNameKeys = Object.values(StateNames) as StateNameType[];
 
 class DimmerLight extends LoxoneDevice<StateNameType> {
+  public Endpoint: MatterbridgeEndpoint;
+
   constructor(control: Control, platform: LoxonePlatform) {
     super(
       control,
@@ -27,7 +29,10 @@ class DimmerLight extends LoxoneDevice<StateNameType> {
     const latestValueEvent = this.getLatestValueEvent(StateNames.position);
     const value = LoxoneLevelInfo.fromLoxoneEvent(latestValueEvent);
 
-    this.Endpoint.createDefaultGroupsClusterServer().createDefaultOnOffClusterServer(value.onOff).createDefaultLevelControlClusterServer(value.matterLevel);
+    this.Endpoint = this.createDefaultEndpoint()
+      .createDefaultGroupsClusterServer()
+      .createDefaultOnOffClusterServer(value.onOff)
+      .createDefaultLevelControlClusterServer(value.matterLevel);
 
     this.addLoxoneCommandHandler('on');
     this.addLoxoneCommandHandler('off');
@@ -60,6 +65,13 @@ class DimmerLight extends LoxoneDevice<StateNameType> {
       await this.Endpoint.updateAttribute(LevelControl.Cluster.id, 'currentLevel', targetLevel.matterLevel, this.Endpoint.log);
     }
   }
+
+  static override typeNames(): string[] {
+    return ['dimmer'];
+  }
 }
+
+// register device with the registry
+RegisterLoxoneDevice(DimmerLight);
 
 export { DimmerLight };

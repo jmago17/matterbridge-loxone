@@ -1,7 +1,7 @@
-import { airConditioner, bridgedNode, powerSource } from 'matterbridge';
+import { airConditioner, bridgedNode, MatterbridgeEndpoint, powerSource } from 'matterbridge';
 import { FanControl, OnOff, TemperatureMeasurement, Thermostat } from 'matterbridge/matter/clusters';
 import { LoxonePlatform } from '../platform.js';
-import { LoxoneDevice } from './LoxoneDevice.js';
+import { LoxoneDevice, RegisterLoxoneDevice } from './LoxoneDevice.js';
 import * as Converters from '../utils/Converters.js';
 import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
 import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
@@ -19,6 +19,8 @@ type StateNameType = (typeof StateNames)[keyof typeof StateNames];
 const StateNameKeys = Object.values(StateNames) as StateNameType[];
 
 class AirConditioner extends LoxoneDevice<StateNameType> {
+  public Endpoint: MatterbridgeEndpoint;
+
   constructor(control: Control, platform: LoxonePlatform) {
     super(
       control,
@@ -33,9 +35,10 @@ class AirConditioner extends LoxoneDevice<StateNameType> {
     const state = Converters.onOffValueConverter(latestStateValueEvent);
     const latestTargetTemperatureValueEvent = this.getLatestValueEvent(StateNames.targetTemperature);
     const latestCurrentTemperatureValueEvent = this.getLatestValueEvent(StateNames.temperature);
-    const currentTemperature = Converters.temperatureValueConverter(latestCurrentTemperatureValueEvent);
+    const currentTemperature = Converters.numberValueConverter(latestCurrentTemperatureValueEvent);
 
-    this.Endpoint.createDefaultGroupsClusterServer()
+    this.Endpoint = this.createDefaultEndpoint()
+      .createDefaultGroupsClusterServer()
       .createDeadFrontOnOffClusterServer(state)
       .createDefaultThermostatClusterServer(latestCurrentTemperatureValueEvent.value, latestTargetTemperatureValueEvent.value, latestTargetTemperatureValueEvent.value)
       .createDefaultThermostatUserInterfaceConfigurationClusterServer()
@@ -67,6 +70,10 @@ class AirConditioner extends LoxoneDevice<StateNameType> {
     });
   }
 
+  static override typeNames(): string[] {
+    return ['airconditioner', 'ac'];
+  }
+
   override async handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
     if (!(event instanceof LoxoneValueEvent)) return;
 
@@ -88,13 +95,13 @@ class AirConditioner extends LoxoneDevice<StateNameType> {
         break;
       }
       case StateNames.targetTemperature: {
-        const targetTemperature = Converters.temperatureValueConverter(event);
+        const targetTemperature = Converters.numberValueConverter(event);
         await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', targetTemperature, this.Endpoint.log);
         await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', targetTemperature, this.Endpoint.log);
         break;
       }
       case StateNames.temperature: {
-        const temperature = Converters.temperatureValueConverter(event);
+        const temperature = Converters.numberValueConverter(event);
         await this.Endpoint.updateAttribute(TemperatureMeasurement.Cluster.id, 'measuredValue', temperature, this.Endpoint.log);
         await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'localTemperature', temperature, this.Endpoint.log);
         break;
@@ -113,5 +120,8 @@ class AirConditioner extends LoxoneDevice<StateNameType> {
     }
   }
 }
+
+// register device with the registry
+RegisterLoxoneDevice(AirConditioner);
 
 export { AirConditioner };

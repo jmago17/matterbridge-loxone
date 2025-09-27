@@ -1,12 +1,14 @@
-import { bridgedNode, powerSource, genericSwitch } from 'matterbridge';
+import { bridgedNode, powerSource, genericSwitch, MatterbridgeEndpoint } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
-import { LoxoneDevice } from './LoxoneDevice.js';
+import { LoxoneDevice, RegisterLoxoneDevice } from './LoxoneDevice.js';
 import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
 import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
 import Control from 'loxone-ts-api/dist/Structure/Control.js';
 import { ActiveOnlyStateNameKeys, ActiveOnlyStateNamesType } from './SingleDataPointSensor.js';
 
 class PushButton extends LoxoneDevice<ActiveOnlyStateNamesType> {
+  public Endpoint: MatterbridgeEndpoint;
+
   constructor(control: Control, platform: LoxonePlatform) {
     super(
       control,
@@ -17,7 +19,7 @@ class PushButton extends LoxoneDevice<ActiveOnlyStateNamesType> {
       `${genericSwitch.name}_${control.structureSection.uuidAction.replace(/-/g, '_')}`,
     );
 
-    this.Endpoint.createDefaultGroupsClusterServer().createDefaultSwitchClusterServer();
+    this.Endpoint = this.createDefaultEndpoint().createDefaultGroupsClusterServer().createDefaultSwitchClusterServer();
   }
 
   override async handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
@@ -31,6 +33,12 @@ class PushButton extends LoxoneDevice<ActiveOnlyStateNamesType> {
   override async populateInitialState() {
     this.Endpoint.log.info(`PushButton ${this.longname} does not have an initial state to populate.`);
   }
+
+  static override typeNames(): string[] {
+    return ['pushbutton'];
+  }
 }
+
+RegisterLoxoneDevice(PushButton);
 
 export { PushButton };

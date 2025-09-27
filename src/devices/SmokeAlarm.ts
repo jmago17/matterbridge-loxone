@@ -1,7 +1,7 @@
-import { bridgedNode, powerSource, smokeCoAlarm } from 'matterbridge';
+import { bridgedNode, MatterbridgeEndpoint, powerSource, smokeCoAlarm } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
 import { SmokeCoAlarm } from 'matterbridge/matter/clusters';
-import { LoxoneDevice } from './LoxoneDevice.js';
+import { LoxoneDevice, RegisterLoxoneDevice } from './LoxoneDevice.js';
 import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
 import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
 import Control from 'loxone-ts-api/dist/Structure/Control.js';
@@ -14,6 +14,7 @@ type StateNameType = (typeof StateNames)[keyof typeof StateNames];
 const StateNameKeys = Object.values(StateNames) as StateNameType[];
 
 class SmokeAlarm extends LoxoneDevice<StateNameType> {
+  public Endpoint: MatterbridgeEndpoint;
   private cause = 0;
   private level = 0;
 
@@ -27,6 +28,9 @@ class SmokeAlarm extends LoxoneDevice<StateNameType> {
       `${SmokeAlarm.name}_${control.structureSection.uuidAction.replace(/-/g, '_')}`,
     );
 
+    const supportsSmoke = control.structureSection.details.availableAlarms & 0x01;
+    if (!supportsSmoke) throw new Error(`Control ${control.name} does not support smoke alarms.`);
+
     const latestCause = this.getLatestValueEvent(StateNames.level);
     const latestLevel = this.getLatestValueEvent(StateNames.alarmCause);
 
@@ -35,7 +39,7 @@ class SmokeAlarm extends LoxoneDevice<StateNameType> {
 
     const alarmState = this.calculateAlarmState();
 
-    this.Endpoint.createSmokeOnlySmokeCOAlarmClusterServer(alarmState);
+    this.Endpoint = this.createDefaultEndpoint().createSmokeOnlySmokeCOAlarmClusterServer(alarmState);
   }
 
   private calculateAlarmState(): SmokeCoAlarm.AlarmState {
@@ -73,6 +77,12 @@ class SmokeAlarm extends LoxoneDevice<StateNameType> {
     const alarmState = this.calculateAlarmState();
     await this.Endpoint.updateAttribute(SmokeCoAlarm.Cluster.id, 'smokeState', alarmState, this.Endpoint.log);
   }
+
+  static override typeNames(): string[] {
+    return ['smoke', 'smokesensor'];
+  }
 }
+
+RegisterLoxoneDevice(SmokeAlarm);
 
 export { SmokeAlarm };

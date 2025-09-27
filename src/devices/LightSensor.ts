@@ -1,18 +1,21 @@
-import { lightSensor } from 'matterbridge';
+import { lightSensor, MatterbridgeEndpoint } from 'matterbridge';
 import { LoxonePlatform } from '../platform.js';
 import { IlluminanceMeasurement } from 'matterbridge/matter/clusters';
 import { SingleDataPointSensor, ValueOnlyStateNameKeys, ValueOnlyStateNames, ValueOnlyStateNamesType } from './SingleDataPointSensor.js';
 import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
 import Control from 'loxone-ts-api/dist/Structure/Control.js';
+import { RegisterLoxoneDevice } from './LoxoneDevice.js';
 
 class LightSensor extends SingleDataPointSensor<ValueOnlyStateNamesType> {
+  public Endpoint: MatterbridgeEndpoint;
+
   constructor(control: Control, platform: LoxonePlatform) {
     super(control, platform, LightSensor.name, 'light sensor', ValueOnlyStateNameKeys[0], lightSensor, IlluminanceMeasurement.Cluster.id, 'measuredValue');
 
     const latestValueEvent = this.getLatestValueEvent(ValueOnlyStateNames.value);
     const initialValue = this.valueConverter(latestValueEvent);
 
-    this.Endpoint.createDefaultIlluminanceMeasurementClusterServer(initialValue);
+    this.Endpoint = this.createDefaultEndpoint().createDefaultIlluminanceMeasurementClusterServer(initialValue);
   }
 
   override valueConverter(event: LoxoneValueEvent | undefined): number {
@@ -20,6 +23,12 @@ class LightSensor extends SingleDataPointSensor<ValueOnlyStateNamesType> {
 
     return Math.round(Math.max(Math.min(10000 * Math.log10(event.value), 0xfffe), 0));
   }
+
+  static override typeNames(): string[] {
+    return ['lightsensor'];
+  }
 }
+
+RegisterLoxoneDevice(LightSensor);
 
 export { LightSensor };
