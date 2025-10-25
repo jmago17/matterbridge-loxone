@@ -1,7 +1,7 @@
 {
   "name": "matterbridge-loxone-jmago17",
   "displayName": "Loxone (JMAGO17 Fork)",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "description": "Custom Loxone Matterbridge plugin forked from Andras Gaal",
   "author": "Josu Martinez Gonzalez",
   "license": "MIT",
@@ -10,6 +10,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
+    "files": [
+    "dist/**/*",
+    "package.json",
+    "README.md"
+  ],
   "dependencies": {
     "loxone-ts-api": "^1.3.2",
     "node-ansi-logger": "^3.0.1",
@@ -17,9 +22,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jmago17/matterbridge-loxone.git"
+    "url": "https://github.com/jmago17/matterbridge-loxone-jmago17.git"
   },
-  "homepage": "https://github.com/jmago17/matterbridge-loxone#readme",
+  "bugs": {
+    "url": "https://github.com/jmago17/matterbridge-loxone-jmago17/issues"
+  },
+  "homepage": "https://github.com/jmago17/matterbridge-loxone-jmago17#readme",
   "keywords": [
     "matterbridge",
     "loxone",
