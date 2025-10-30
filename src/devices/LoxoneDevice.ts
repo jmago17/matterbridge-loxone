@@ -191,11 +191,11 @@ abstract class LoxoneDevice<T extends string = string> {
    * @param loxoneCommandFormatter Optional function to generate the Loxone command.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public addLoxoneAttributeSubscription(cluster: ClusterId, attribute: string, loxoneCommandFormatter: (newValue: any) => string | string[] | undefined) {
+  public addLoxoneAttributeSubscription(cluster: ClusterId, attribute: string, loxoneCommandFormatter: (newValue: any, oldValue?: any) => string | string[] | undefined) {
     // prepare the loxone command
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
     const delegate = async (newValue: any, oldValue: any, context?: any) => {
-      let commandStrings = loxoneCommandFormatter(newValue);
+      let commandStrings = loxoneCommandFormatter(newValue, oldValue);
 
       if (commandStrings === undefined) {
         return;
