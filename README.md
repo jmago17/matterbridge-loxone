@@ -72,6 +72,7 @@ The plugin supports the following types
 |outlet|switch (outlet)|any `Pushbutton` or `Switch` device (0/1 values)|none|
 |light|switch (light)|any `Pushbutton` or `Switch` device (0/1 values)|none|
 |switch|switch|any `Pushbutton` or `Switch` device (0/1 values)|none|
+|watervalve|water valve|any `Switch` device (0/1 values)|`state=<stateName>` optional|Maps on/off to open/close|
 |dimmer|dimmable light|`LightControllerV2` circuit|none|UUID needs to be in the format `<UUID>/AIxx`
 |mood|switch (light)|`LightControllerV2` mood|`moodId` ID of the mood||
 |radio|switch|`Radio`|`outputId` output number of the radio button||
@@ -84,6 +85,8 @@ Optional settings are in the format of `key=value` and are separated by a comma.
 
 Additionally, all devices support specifying remaining battery %, by adding a `battery` setting to the optional settings:
 `battery=<batterystatusUUID>`.
+
+For water valves you can supply `state=<loxoneStateName>` if the control does not expose an `active` state (for example `state=value`).
 
 > Don't forget to restart matterbridge after making a configuration change
 

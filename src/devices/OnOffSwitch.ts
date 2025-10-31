@@ -10,7 +10,7 @@ class OnOffSwitch extends OnOffDevice {
   }
 
   static override typeNames(): string[] {
-    return ['switch'];
+    return ['switch', 'watervalve', 'WaterValve', 'valve', 'Valve'];
   }
 }
 

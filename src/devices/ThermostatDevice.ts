@@ -56,6 +56,7 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
     });
     this.addLoxoneAttributeSubscription(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', (newValue: number, oldValue: number) => {
       // Prevent feedback loop: don't send commands during initialization, Loxone updates, or if value hasn't changed
+      platform.log.info(`[DEBUG] occupiedHeatingSetpoint callback: newValue=${newValue}, oldValue=${oldValue}, isUpdatingFromLoxone=${this.isUpdatingFromLoxone}, isInitializing=${this.isInitializing}`);
       if (this.isInitializing || this.isUpdatingFromLoxone || newValue === oldValue) return undefined;
 
       const temperature = Math.round(newValue / 100);
@@ -69,6 +70,7 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
     });
     this.addLoxoneAttributeSubscription(Thermostat.Cluster.id, 'systemMode', (newValue: number, oldValue: number) => {
       // Prevent feedback loop: don't send commands during initialization, Loxone updates, or if value hasn't changed
+      platform.log.info(`[DEBUG] systemMode callback: newValue=${newValue}, oldValue=${oldValue}, isUpdatingFromLoxone=${this.isUpdatingFromLoxone}, isInitializing=${this.isInitializing}`);
       if (this.isInitializing || this.isUpdatingFromLoxone || newValue === oldValue) return undefined;
 
       // Matter systemMode: 0=Off, 1=Auto, 3=Cool, 4=Heat, 5=EmergencyHeat, 6=Precooling, 7=Fan only, 8=Dry, 9=Sleep
@@ -125,6 +127,7 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
 
   private async updateAttributesFromLoxoneEvent(event: LoxoneValueEvent) {
     // Set flag to prevent feedback loop - we're updating from Loxone, not from HomeKit/Matter
+    this.platform.log.info(`[DEBUG] Setting isUpdatingFromLoxone=true for state: ${event.state?.name}, value: ${event.value}`);
     this.isUpdatingFromLoxone = true;
     try {
       switch (event.state?.name) {
@@ -187,8 +190,13 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
         default:
       }
     } finally {
-      // Always reset the flag after processing, even if there was an error
-      this.isUpdatingFromLoxone = false;
+      // Delay resetting the flag to ensure any subscription callbacks triggered by updateAttribute
+      // have a chance to check the flag before it's reset. This prevents feedback loops where
+      // the callback fires asynchronously after the flag has been reset.
+      setImmediate(() => {
+        this.platform.log.info(`[DEBUG] Setting isUpdatingFromLoxone=false (delayed via setImmediate)`);
+        this.isUpdatingFromLoxone = false;
+      });
     }
   }
 }
