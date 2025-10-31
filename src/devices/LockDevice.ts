@@ -29,18 +29,18 @@ class LockDevice extends LoxoneDevice<ActiveOnlyStateNamesType> {
     // Handle lock command from HomeKit
     this.Endpoint.addCommandHandler('lockDoor', async () => {
       this.platform.log.info(`Locking door: ${this.longname}`);
-      await this.platform.loxoneClient.control(this.control.uuidAction, 'On');
+      await this.platform.loxoneClient.control(this.control.uuidAction, 'Off');
     });
 
     // Handle unlock command from HomeKit
     this.Endpoint.addCommandHandler('unlockDoor', async () => {
       this.platform.log.info(`Unlocking door: ${this.longname}`);
-      await this.platform.loxoneClient.control(this.control.uuidAction, 'Off');
+      await this.platform.loxoneClient.control(this.control.uuidAction, 'On');
     });
   }
 
   static override typeNames(): string[] {
-    return ['switch'];
+    return ['lock', 'Lock'];
   }
 
   override async handleLoxoneDeviceEvent(event: LoxoneValueEvent | LoxoneTextEvent) {
@@ -55,8 +55,8 @@ class LockDevice extends LoxoneDevice<ActiveOnlyStateNamesType> {
   }
 
   private async updateAttributesFromLoxoneEvent(event: LoxoneValueEvent) {
-    // Convert Loxone on/off to Matter lock state: on=1=locked, off=0=unlocked
-    const lockState = event.value === 1 ? DoorLock.LockState.Locked : DoorLock.LockState.Unlocked;
+    // Convert Loxone on/off to Matter lock state: on=1=unlocked, off=0=locked
+    const lockState = event.value === 1 ? DoorLock.LockState.Unlocked : DoorLock.LockState.Locked;
     await this.Endpoint.updateAttribute(DoorLock.Cluster.id, 'lockState', lockState, this.Endpoint.log);
   }
 }
