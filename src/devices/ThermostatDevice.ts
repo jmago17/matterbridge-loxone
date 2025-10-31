@@ -21,6 +21,7 @@ const StateNameKeys = Object.values(StateNames) as StateNameType[];
 class ThermostatDevice extends LoxoneDevice<StateNameType> {
   public Endpoint: MatterbridgeEndpoint;
   private isInitializing: boolean = true;
+  private isUpdatingFromLoxone: boolean = false;
 
   constructor(control: Control, platform: LoxonePlatform) {
     super(
@@ -45,8 +46,8 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
       .createDefaultTemperatureMeasurementClusterServer(currentTemperature);
 
     this.addLoxoneAttributeSubscription(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', (newValue: number, oldValue: number) => {
-      // Prevent feedback loop: don't send commands during initialization or if value hasn't changed
-      if (this.isInitializing || newValue === oldValue) return undefined;
+      // Prevent feedback loop: don't send commands during initialization, Loxone updates, or if value hasn't changed
+      if (this.isInitializing || this.isUpdatingFromLoxone || newValue === oldValue) return undefined;
 
       const temperature = Math.round(newValue / 100);
       const loxoneCommand = `setComfortTemperatureCool/${temperature}`;
@@ -54,8 +55,8 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
       return loxoneCommand;
     });
     this.addLoxoneAttributeSubscription(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', (newValue: number, oldValue: number) => {
-      // Prevent feedback loop: don't send commands during initialization or if value hasn't changed
-      if (this.isInitializing || newValue === oldValue) return undefined;
+      // Prevent feedback loop: don't send commands during initialization, Loxone updates, or if value hasn't changed
+      if (this.isInitializing || this.isUpdatingFromLoxone || newValue === oldValue) return undefined;
 
       const temperature = Math.round(newValue / 100);
       // Use timed override like Homebridge does - timer is seconds since 2009-01-01
@@ -67,8 +68,8 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
       return loxoneCommand;
     });
     this.addLoxoneAttributeSubscription(Thermostat.Cluster.id, 'systemMode', (newValue: number, oldValue: number) => {
-      // Prevent feedback loop: don't send commands during initialization or if value hasn't changed
-      if (this.isInitializing || newValue === oldValue) return undefined;
+      // Prevent feedback loop: don't send commands during initialization, Loxone updates, or if value hasn't changed
+      if (this.isInitializing || this.isUpdatingFromLoxone || newValue === oldValue) return undefined;
 
       // Matter systemMode: 0=Off, 1=Auto, 3=Cool, 4=Heat, 5=EmergencyHeat, 6=Precooling, 7=Fan only, 8=Dry, 9=Sleep
       const date2009 = new Date('2009-01-01 00:00:00');
@@ -123,64 +124,71 @@ class ThermostatDevice extends LoxoneDevice<StateNameType> {
   }
 
   private async updateAttributesFromLoxoneEvent(event: LoxoneValueEvent) {
-    switch (event.state?.name) {
-      case StateNames.tempTarget: {
-        const targetTemperature = Converters.numberValueConverter(event);
-        // Target temperature typically updates both heating and cooling setpoints in auto mode
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', targetTemperature, this.Endpoint.log);
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', targetTemperature, this.Endpoint.log);
-        break;
-      }
-      case StateNames.tempActual: {
-        const temperature = Converters.numberValueConverter(event);
-        await this.Endpoint.updateAttribute(TemperatureMeasurement.Cluster.id, 'measuredValue', temperature, this.Endpoint.log);
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'localTemperature', temperature, this.Endpoint.log);
-        break;
-      }
-      case StateNames.comfortTemperature: {
-        const heatingSetpoint = Converters.numberValueConverter(event);
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', heatingSetpoint, this.Endpoint.log);
-        break;
-      }
-      case StateNames.comfortTemperatureCool: {
-        const coolingSetpoint = Converters.numberValueConverter(event);
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', coolingSetpoint, this.Endpoint.log);
-        break;
-      }
-      case StateNames.activeMode: {
-        // Loxone activeMode: 0=Economy, 1=Comfort, 2=Off, 3=Manual heating, 4=Building protection/Manual cooling
-        // Matter systemMode: 0=Off, 1=Auto, 3=Cool, 4=Heat
-        const loxoneMode = event.value;
-        let matterMode: number;
-        switch (loxoneMode) {
-          case 0: // Economy -> Auto
-          case 1: // Comfort -> Auto
-            matterMode = 1; // Auto
-            break;
-          case 2: // Off -> Off
-          case 4: // Building protection/Manual cooling -> Off (or could be Cool mode)
-            matterMode = 0; // Off
-            break;
-          case 3: // Manual heating -> Heat
-            matterMode = 4; // Heat
-            break;
-          default:
-            this.platform.log.warn(`IRC V2 unknown activeMode: ${loxoneMode}, defaulting to Auto`);
-            matterMode = 1; // Default to Auto
+    // Set flag to prevent feedback loop - we're updating from Loxone, not from HomeKit/Matter
+    this.isUpdatingFromLoxone = true;
+    try {
+      switch (event.state?.name) {
+        case StateNames.tempTarget: {
+          const targetTemperature = Converters.numberValueConverter(event);
+          // Target temperature typically updates both heating and cooling setpoints in auto mode
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', targetTemperature, this.Endpoint.log);
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', targetTemperature, this.Endpoint.log);
+          break;
         }
-        this.platform.log.info(`IRC V2 activeMode changed to ${loxoneMode}, setting Matter systemMode to ${matterMode}`);
-        await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'systemMode', matterMode, this.Endpoint.log);
-        break;
+        case StateNames.tempActual: {
+          const temperature = Converters.numberValueConverter(event);
+          await this.Endpoint.updateAttribute(TemperatureMeasurement.Cluster.id, 'measuredValue', temperature, this.Endpoint.log);
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'localTemperature', temperature, this.Endpoint.log);
+          break;
+        }
+        case StateNames.comfortTemperature: {
+          const heatingSetpoint = Converters.numberValueConverter(event);
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedHeatingSetpoint', heatingSetpoint, this.Endpoint.log);
+          break;
+        }
+        case StateNames.comfortTemperatureCool: {
+          const coolingSetpoint = Converters.numberValueConverter(event);
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'occupiedCoolingSetpoint', coolingSetpoint, this.Endpoint.log);
+          break;
+        }
+        case StateNames.activeMode: {
+          // Loxone activeMode: 0=Economy, 1=Comfort, 2=Off, 3=Manual heating, 4=Building protection/Manual cooling
+          // Matter systemMode: 0=Off, 1=Auto, 3=Cool, 4=Heat
+          const loxoneMode = event.value;
+          let matterMode: number;
+          switch (loxoneMode) {
+            case 0: // Economy -> Auto
+            case 1: // Comfort -> Auto
+              matterMode = 1; // Auto
+              break;
+            case 2: // Off -> Off
+            case 4: // Building protection/Manual cooling -> Off (or could be Cool mode)
+              matterMode = 0; // Off
+              break;
+            case 3: // Manual heating -> Heat
+              matterMode = 4; // Heat
+              break;
+            default:
+              this.platform.log.warn(`IRC V2 unknown activeMode: ${loxoneMode}, defaulting to Auto`);
+              matterMode = 1; // Default to Auto
+          }
+          this.platform.log.info(`IRC V2 activeMode changed to ${loxoneMode}, setting Matter systemMode to ${matterMode}`);
+          await this.Endpoint.updateAttribute(Thermostat.Cluster.id, 'systemMode', matterMode, this.Endpoint.log);
+          break;
+        }
+        case StateNames.operatingMode: {
+          // Loxone operatingMode: 0=Idle, 1=Heating, 2=Cooling
+          // Update the current heating/cooling state based on what's actually happening
+          const operatingMode = event.value;
+          this.platform.log.info(`IRC V2 operatingMode changed to ${operatingMode}`);
+          // This could be used to update currentHeatingCoolingState if needed
+          break;
+        }
+        default:
       }
-      case StateNames.operatingMode: {
-        // Loxone operatingMode: 0=Idle, 1=Heating, 2=Cooling
-        // Update the current heating/cooling state based on what's actually happening
-        const operatingMode = event.value;
-        this.platform.log.info(`IRC V2 operatingMode changed to ${operatingMode}`);
-        // This could be used to update currentHeatingCoolingState if needed
-        break;
-      }
-      default:
+    } finally {
+      // Always reset the flag after processing, even if there was an error
+      this.isUpdatingFromLoxone = false;
     }
   }
 }
