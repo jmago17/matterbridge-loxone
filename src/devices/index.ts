@@ -20,6 +20,7 @@ import './WaterLeakSensor.js';
 import './WindowShade.js';
 import './CoAlarm.js';
 import './ThermostatDevice.js';
+import './LockDevice.js';
 
 // This file's main purpose is module evaluation; platform can import it to ensure registration.
 export {};
