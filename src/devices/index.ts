@@ -21,6 +21,8 @@ import './WindowShade.js';
 import './CoAlarm.js';
 import './ThermostatDevice.js';
 import './LockDevice.js';
+import './ColorTemperatureLight.js';
+import './RGBLight.js';
 
 // This file's main purpose is module evaluation; platform can import it to ensure registration.
 export {};
